@@ -1,0 +1,2 @@
+python -m venv ../venv3
+..\venv3\Scripts\activate
