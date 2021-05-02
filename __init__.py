@@ -96,15 +96,13 @@ def load_report_json(exclude_index=True):
     if os.path.exists(path):
         data_table = load_json(path)
     else:
-        data_all = load_stocklist_json()
+        data_all = [d for d in load_stocklist_json() if not exclude_index or not is_index_stock(d['codeName'])]
         data_list_head = []
         data_list = []
-        data_table = {}
+        data_table = []
         data_all_len_pow = len(data_all) * len(data_all)
         for i, d in enumerate(data_all):
             print(f'{i*i * 100.0 / data_all_len_pow}%')
-            if exclude_index and is_index_stock(d['codeName']):
-                continue
             full_code = d['full_code']
             _j2 = load_stock_json(full_code, old_data_limit=0)
             j2 = []
@@ -142,8 +140,8 @@ def load_report_json(exclude_index=True):
                     j2_avg = j2_sum/cov_cnt
                     j3_avg = j3_sum/cov_cnt
                     cov = (cov_sum/cov_cnt) - j3_avg * j2_avg
-                    data_table[f'{full_code}_{j3_head}'] = cov / (j2_pow_sum/cov_cnt - j2_avg * j2_avg)
-                    data_table[f'{j3_head}_{full_code}'] = cov / (j3_pow_sum/cov_cnt - j3_avg * j3_avg)
+                    data_table.append([f'{full_code}_{j3_head}', cov / (j2_pow_sum/cov_cnt - j2_avg * j2_avg)])
+                    data_table.append([f'{j3_head}_{full_code}', cov / (j3_pow_sum/cov_cnt - j3_avg * j3_avg)])
             data_list_head.append(full_code)
             data_list.append(j2)
         save_json(data_table, path)
