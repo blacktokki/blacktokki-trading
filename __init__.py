@@ -153,6 +153,22 @@ def cov_and_var(j2_body, j3_body):
     return None, None, None
 
 
+def report_merge(j2_body, j3_body, efficient):
+    j4_body = []
+    j3_body_i = 0
+    j3_body_len = len(j3_body)
+    for j2_data in j2_body:
+        j3_data = j3_body[j3_body_i] if j3_body_len > 0 else {'TRD_DD':datetime(1990,1,1).date()}
+        while j2_data['TRD_DD'] < j3_data['TRD_DD'] and j3_body_i < j3_body_len-1:
+            j3_body_i += 1
+            j3_data = j3_body[j3_body_i]
+        if j2_data['TRD_DD'] == j3_data['TRD_DD']:
+            j4_data = {'TRD_DD': j2_data['TRD_DD'], 'FLUC_RT': j2_data['FLUC_RT']* efficient + j3_data['FLUC_RT']* (1-efficient)}
+            j4_data['FLUC_RT_POW'] = j4_data['FLUC_RT'] * j4_data['FLUC_RT']
+            j4_body.append(j4_data)
+    return j4_body
+
+
 def save_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), exclude_index=True, reset=False, trdval_days=20, min_trdval=40000000000):
     data_all = [d for d in load_stocklist_json() if (not exclude_index or not is_index_stock(d['codeName']))]
     data_split = [[] for i in range(FILE_SPLIT)]
@@ -310,6 +326,7 @@ def load_report_json(*args):
         print(key[3:9], key[16:22])
     for key in sets:
         print(key, [result[key] for result in results])
+    print('_'.join(sets))
 
 
 def load_past_report_json(*args):
@@ -318,14 +335,38 @@ def load_past_report_json(*args):
     date1 = datetime.strptime(args[2], '%Y-%m-%d').date() if len(args) >2 else None
     offset = int(args[3]) if len(args) >3 else None
     
-    key1, key2 = keys.split('_')
+    key_all = keys.split('_')
     delta = (repeat-1) * REPORT_OFFSET2
     start_date = date1 - timedelta(offset*(delta +1))
     end_date = date1 - timedelta(offset*delta)
-    j2 = report_json_data(load_stock_json(key1, old_data_limit=0)['output'], start_date, end_date)
-    j3 = report_json_data(load_stock_json(key2, old_data_limit=0)['output'], start_date, end_date)
-    cov, var_j2, var_j3 = cov_and_var(j2, j3)
-    print(math.sqrt(var_j2), math.sqrt(var_j3))
+    j_all = [report_json_data(load_stock_json(key, old_data_limit=0)['output'], start_date, end_date) for key in key_all]
+    j_dict = {}
+    eff_dict = {}
+    i = 0
+    while i+1 < len(j_all):
+        j2 = j_all[i]
+        j3 = j_all[i+1]
+        key2 = key_all[i]
+        key3 = key_all[i+1]
+        cov, var_j2, var_j3 = cov_and_var(j2, j3)
+        efficient = (var_j3 - cov)/ (var_j2 -2*cov +var_j3)
+        print([k[3:9] for k in key2.split('_')], [k[3:9] for k in key3.split('_')], math.sqrt(var_j2), math.sqrt(var_j3), efficient, 1-efficient)
+        j_dict[f"{key2}_{key3}"] = report_merge(j2, j3, efficient)
+        eff_dict[f"{key2}_{key3}"] = efficient
+        i+=2
+    for i, kv in enumerate(j_dict.items()):
+        key2, j2 = kv
+        for key3, j3 in list(j_dict.items())[:i]:
+            cov, var_j2, var_j3 = cov_and_var(j2, j3)
+            efficient = (var_j3 - cov)/ (var_j2 -2*cov +var_j3)
+            key_partial = f"{key2}_{key3}".split('_')
+            if 0.33< efficient and efficient <0.66:
+                print(efficient, {
+                key_partial[0][3:9]: eff_dict[key2] * efficient,
+                key_partial[1][3:9]: (1-eff_dict[key2]) * efficient,
+                key_partial[2][3:9]: eff_dict[key3] * (1- efficient),
+                key_partial[3][3:9]: (1-eff_dict[key3]) * (1 - efficient)
+            })
 
 if __name__ == "__main__":
     locals().get(sys.argv[1])(*(sys.argv[2:]))
