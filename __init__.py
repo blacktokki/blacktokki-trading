@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import math
+import subprocess
 from jsonio import save_json, load_json
 
 headers = {'User-Agent': 'Chrome/78.0.3904.87 Safari/537.36',}
@@ -106,8 +107,53 @@ def trdval_filter(data, trdval_days, min_trdval):
             break
     return trd_val_sum > min_trdval
 
+def report_json_data(output, start_date, end_date):
+    j2 = []
+    for _j2_data in output:
+        trd_dd = datetime.strptime(_j2_data['TRD_DD'], '%Y/%m/%d').date()
+        if start_date <= trd_dd and trd_dd <= end_date:
+            j2_data = {}
+            j2_data['TRD_DD'] = trd_dd
+            j2_data['FLUC_RT'] = float(_j2_data['FLUC_RT'])
+            j2_data['FLUC_RT_POW'] = j2_data['FLUC_RT'] * j2_data['FLUC_RT']
+            j2.append(j2_data)
+    return j2
 
-def save_report_json(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), exclude_index=True, reset=False, trdval_days=20, min_trdval=40000000000):
+
+def cov_and_var(j2_body, j3_body):
+    j3_body_i = 0
+    j3_body_len = len(j3_body)
+    j3_sum = 0.0
+    j3_pow_sum = 0.0
+    j2_sum = 0.0
+    j2_pow_sum = 0.0
+    cov_sum = 0.0
+    cov_cnt = 0
+    _tm = []
+    for j2_data in j2_body:
+        j3_data = j3_body[j3_body_i] if j3_body_len > 0 else {'TRD_DD':datetime(1990,1,1).date()}
+        while j2_data['TRD_DD'] < j3_data['TRD_DD'] and j3_body_i < j3_body_len-1:
+            j3_body_i += 1
+            j3_data = j3_body[j3_body_i]
+        if j2_data['TRD_DD'] == j3_data['TRD_DD']:
+            j2_sum += j2_data['FLUC_RT']
+            j2_pow_sum += j2_data['FLUC_RT_POW']
+            j3_sum += j3_data['FLUC_RT']
+            j3_pow_sum += j3_data['FLUC_RT_POW']
+            cov_sum += j3_data['FLUC_RT'] * j2_data['FLUC_RT']
+            _tm.append(j3_data['FLUC_RT'])
+            cov_cnt += 1
+    if cov_cnt and j2_sum != 0 and j3_sum != 0:
+        j2_avg = j2_sum/cov_cnt
+        j3_avg = j3_sum/cov_cnt
+        cov = (cov_sum/cov_cnt) - j3_avg * j2_avg
+        j2_var = j2_pow_sum/cov_cnt - j2_avg * j2_avg
+        j3_var = j3_pow_sum/cov_cnt - j3_avg * j3_avg
+        return cov, j2_var, j3_var
+    return None, None, None
+
+
+def save_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), exclude_index=True, reset=False, trdval_days=20, min_trdval=40000000000):
     data_all = [d for d in load_stocklist_json() if (not exclude_index or not is_index_stock(d['codeName']))]
     data_split = [[] for i in range(FILE_SPLIT)]
     data_all_len_pow = len(data_all) * len(data_all)
@@ -117,6 +163,7 @@ def save_report_json(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1),
     data_list_head = []
     data_list = []
     raw_i = 0
+    prev_per = 0
     root_path = os.path.join('data', 'report', f'{start_date}_{end_date}')
     if not os.path.exists(root_path):
         os.mkdir(root_path)
@@ -125,21 +172,16 @@ def save_report_json(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1),
         data_table_old = load_json(path) if os.path.exists(path) else {} 
         data_table = {} 
         for i, d in enumerate(data_split[k]):
-            print(f'{raw_i*raw_i * 100.0 / data_all_len_pow}%')
+            per = raw_i*raw_i * 100.0 / data_all_len_pow
+            if per>prev_per:
+                prev_per += 1
+                print(f'{per}%')
             full_code = d['full_code']
             _j2 = load_stock_json(full_code, old_data_limit=0)
             if trdval_filter(_j2, trdval_days, min_trdval) is False:
                 raw_i += 1
                 continue
-            j2 = []
-            for _j2_data in _j2['output']:
-                trd_dd = datetime.strptime(_j2_data['TRD_DD'], '%Y/%m/%d').date()
-                if start_date <= trd_dd and trd_dd <= end_date:
-                    j2_data = {}
-                    j2_data['TRD_DD'] = trd_dd
-                    j2_data['FLUC_RT'] = float(_j2_data['FLUC_RT'])
-                    j2_data['FLUC_RT_POW'] = j2_data['FLUC_RT'] * j2_data['FLUC_RT']
-                    j2.append(j2_data)
+            j2 = report_json_data(_j2['output'], start_date, end_date)
             for k in range(len(data_list_head)):
                 j3_head = data_list_head[k]
                 key1 = f'{full_code}_{j3_head}'
@@ -148,38 +190,10 @@ def save_report_json(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1),
                     data_table[key1] = data_table_old.pop(key1)
                     data_table[key2] = data_table_old.pop(key2)
                 elif reset is False:
-                    j3_body = data_list[k]
-                    j3_body_i = 0
-                    j3_body_len = len(j3_body)
-                    j3_sum = 0.0
-                    j3_pow_sum = 0.0
-                    j2_sum = 0.0
-                    j2_pow_sum = 0.0
-                    cov_sum = 0.0
-                    cov_cnt = 0
-                    _tm = []
-                    for j2_data in j2:
-                        j3_data = j3_body[j3_body_i] if j3_body_len > 0 else {'TRD_DD':datetime(1990,1,1).date()}
-                        while j2_data['TRD_DD'] < j3_data['TRD_DD'] and j3_body_i < j3_body_len-1:
-                            j3_body_i += 1
-                            j3_data = j3_body[j3_body_i]
-                        if j2_data['TRD_DD'] == j3_data['TRD_DD']:
-                            j2_sum += j2_data['FLUC_RT']
-                            j2_pow_sum += j2_data['FLUC_RT_POW']
-                            j3_sum += j3_data['FLUC_RT']
-                            j3_pow_sum += j3_data['FLUC_RT_POW']
-                            cov_sum += j3_data['FLUC_RT'] * j2_data['FLUC_RT']
-                            _tm.append(j3_data['FLUC_RT'])
-                            cov_cnt += 1
-                    if cov_cnt and j2_sum != 0 and j3_sum != 0:
-                        j2_avg = j2_sum/cov_cnt
-                        j3_avg = j3_sum/cov_cnt
-                        cov = (cov_sum/cov_cnt) - j3_avg * j2_avg
-                        j2_var = j2_pow_sum/cov_cnt - j2_avg * j2_avg
-                        j3_var = j3_pow_sum/cov_cnt - j3_avg * j3_avg
-                        if j2_var !=0 and j3_var!=0:
-                            data_table[key1] = cov / j2_var
-                            data_table[key2] = cov / j3_var
+                    cov, j2_var, j3_var = cov_and_var(j2, data_list[k])
+                    if cov is not None and j2_var !=0 and j3_var!=0:
+                        data_table[key1] = cov / j2_var
+                        data_table[key2] = cov / j3_var
                 else:
                     data_table[key1] = 0
                     data_table[key2] = 0
@@ -189,7 +203,41 @@ def save_report_json(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1),
         save_json(data_table, path)
 
 
-def load_normal(exclude_index=False):
+def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), min_correl=-1 ,max_correl=1, min_lisk=-2.5):
+    root_path = os.path.join('data', 'report', f'{start_date}_{end_date}')
+    data_all = {}
+    result = {}
+    for k in range(FILE_SPLIT):
+        path = os.path.join(root_path,  f'{FILE_SPLIT}_{k}.json')
+        data_table_old = load_json(path)
+        for k in list(data_table_old.keys()):
+            value = data_table_old.pop(k, None)
+            if value is not None:
+                reverse_key = '_'.join(reversed(k.split('_')))
+                value2 = data_table_old.pop(reverse_key)
+                data_all[k] = value
+                data_all[reverse_key] = value2
+                correl = math.copysign(1, value)*math.sqrt(value * value2)
+                editbeta1 = value/ math.copysign(correl, 1)
+                editbeta2 = value2/math.copysign(correl, 1)
+                if min_correl <= correl and correl < max_correl and editbeta1 + editbeta2 > min_lisk:
+                    result[k] = [editbeta1, editbeta2]
+    return result
+
+
+def remove_stock_json():
+    data_all = load_stocklist_json()
+    for i, d in enumerate(data_all):
+        full_code = d['full_code']
+        path = os.path.join('data', 'stock', f'{full_code}.json')
+        if '스팩' in d['codeName']:
+            print(d['codeName'])
+            # if os.path.exists(path):
+            #     os.remove(path)
+
+
+def load_normal(*args):
+    exclude_index = int(args[0]) if len(args) >0 else 0
     data_all = load_stocklist_json()
     cnt = 0
     status = [0, 0, 0, 0]
@@ -213,57 +261,73 @@ def load_normal(exclude_index=False):
         #    print(df['Date'][i])
     print(status, cnt)
 
-def load_report_json(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1)):
-    root_path = os.path.join('data', 'report', f'{start_date}_{end_date}')
-    data_all = {}
-    result = {}
-    for k in range(FILE_SPLIT):
-        path = os.path.join(root_path,  f'{FILE_SPLIT}_{k}.json')
-        data_table_old = load_json(path)
-        for k in list(data_table_old.keys()):
-            value = data_table_old.pop(k, None)
-            if value is not None:
-                reverse_key = '_'.join(reversed(k.split('_')))
-                value2 = data_table_old.pop(reverse_key)
-                data_all[k] = value
-                data_all[reverse_key] = value2
-                correl = math.copysign(1, value)*math.sqrt(value * value2)
-                editbeta1 = value/ math.copysign(correl, 1)
-                editbeta2 = value2/math.copysign(correl, 1)
-                if correl < -0.33:
-                    result[k] = [editbeta1, editbeta2]
-    return result
+
+REPORT_OFFSET2 = 0.5
+MAX_PROCESS = 4
+
+def save_report_json(*args):
+    repeat = int(args[0]) if len(args) >0 else 0
+    date1 = datetime.strptime(args[1], '%Y-%m-%d').date() if len(args) >1 else None
+    offset = int(args[2]) if len(args) >2 else None
+    delta = int(args[3]) *REPORT_OFFSET2 if len(args) >3 else None
+    cmds = []
+    ps = []
+    if delta is None:
+        for i in range(repeat):
+            cmds.append(f'{os.getcwd()}/../venv3/Scripts/python {__file__} "save_report_json" {args[0]} {args[1]} {args[2]} {i}')
+        while ps + cmds:
+            ps = [p for p in ps if p.poll() is None]
+            cmd_cnt = 0
+            while len(ps) < MAX_PROCESS and cmd_cnt < len(cmds):
+                ps.append(subprocess.Popen(cmds[cmd_cnt], shell=True))
+                cmd_cnt += 1
+            cmds = cmds[cmd_cnt:]
+            time.sleep(4)
+    elif date1 and offset:
+        print('delta: ', delta)
+        save_report_json_part(start_date= date1 - timedelta(offset*(delta+1)), end_date=date1 - timedelta(offset*delta), exclude_index=True)
 
 
-def remove_stock_json():
-    data_all = load_stocklist_json()
-    for i, d in enumerate(data_all):
-        full_code = d['full_code']
-        path = os.path.join('data', 'stock', f'{full_code}.json')
-        if '스팩' in d['codeName']:
-            print(d['codeName'])
-            # if os.path.exists(path):
-            #     os.remove(path)
+def load_report_json(*args):
+    repeat = int(args[0]) if len(args) >0 else 0
+    date1 = datetime.strptime(args[1], '%Y-%m-%d').date() if len(args) >1 else None
+    offset = int(args[2]) if len(args) >2 else None
+    min_correl = float(args[3]) if len(args) >3 else -1
+    max_correl = float(args[4]) if len(args) >4 else 1
+    min_lisk = float(args[5]) if len(args) >5 else -2.5
+    results = []
+    sets = None
+    for i in range(repeat):
+        delta = i * REPORT_OFFSET2
+        results.append(load_report_json_part(
+            start_date= date1 - timedelta(offset*(delta +1)), end_date=date1 - timedelta(offset*delta), min_correl=min_correl, max_correl=max_correl, min_lisk=min_lisk
+        ))
+        if i == 0:
+            sets = set(results[i].keys())
+        else:
+            sets = sets & set(results[i].keys())
+    for key in sets:
+        print(key[3:9], key[16:22])
+    for key in sets:
+        print(key, [result[key] for result in results])
+
+
+def load_past_report_json(*args):
+    keys = args[0] if len(args) > 0 else None
+    repeat = int(args[1]) if len(args) >1 else 0
+    date1 = datetime.strptime(args[2], '%Y-%m-%d').date() if len(args) >2 else None
+    offset = int(args[3]) if len(args) >3 else None
+    
+    key1, key2 = keys.split('_')
+    delta = (repeat-1) * REPORT_OFFSET2
+    start_date = date1 - timedelta(offset*(delta +1))
+    end_date = date1 - timedelta(offset*delta)
+    j2 = report_json_data(load_stock_json(key1, old_data_limit=0)['output'], start_date, end_date)
+    j3 = report_json_data(load_stock_json(key2, old_data_limit=0)['output'], start_date, end_date)
+    cov, var_j2, var_j3 = cov_and_var(j2, j3)
+    print(math.sqrt(var_j2), math.sqrt(var_j3))
 
 if __name__ == "__main__":
-    # load_normal()
-    
-    date1 = datetime(2021,5,5).date()
-    offset = 42
-    offset2 = 0.5
-    repeat = 4
-    delta = int(sys.argv[1]) *offset2 if len(sys.argv) >1 else None
-    if delta is not None:
-        save_report_json(start_date= date1 - timedelta(offset*(delta+1)), end_date=date1 - timedelta(offset*delta), exclude_index=True)
-    else:
-        results = []
-        sets = None
-        for i in range(repeat):
-            delta = i * offset2
-            results.append(load_report_json(start_date= date1 - timedelta(offset*(delta +1)), end_date=date1 - timedelta(offset*delta)))
-            if i == 0:
-                sets = set(results[i].keys())
-            else:
-                sets = sets & set(results[i].keys())
-        for key in sets:
-            print(key[3:9], key[16:22], [result[key] for result in results])
+    locals().get(sys.argv[1])(*(sys.argv[2:]))
+    # __init__.py load_report_json 3 2021-05-05 42 -1 -0.4 -2.25
+    # __init__.py load_past_report_json KR7241820000_KR7004920005 3 2021-05-05 42
