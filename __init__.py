@@ -219,7 +219,7 @@ def save_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,
         save_json(data_table, path)
 
 
-def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), min_correl=-1 ,max_correl=1, min_lisk=-2.5):
+def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), min_correl=-1 ,max_correl=1, max_lisk=0.66):
     root_path = os.path.join('data', 'report', f'{start_date}_{end_date}')
     data_all = {}
     result = {}
@@ -236,7 +236,8 @@ def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,
                 correl = math.copysign(1, value)*math.sqrt(value * value2)
                 editbeta1 = value/ math.copysign(correl, 1)
                 editbeta2 = value2/math.copysign(correl, 1)
-                if min_correl <= correl and correl < max_correl and editbeta1 + editbeta2 > min_lisk:
+                lisk = max(editbeta1/(editbeta1 + editbeta2), editbeta2/(editbeta1 + editbeta2))
+                if min_correl <= correl and correl < max_correl and lisk < max_lisk:
                     result[k] = [editbeta1, editbeta2]
     return result
 
@@ -310,13 +311,13 @@ def load_report_json(*args):
     offset = int(args[2]) if len(args) >2 else None
     min_correl = float(args[3]) if len(args) >3 else -1
     max_correl = float(args[4]) if len(args) >4 else 1
-    min_lisk = float(args[5]) if len(args) >5 else -2.5
+    max_lisk = float(args[5]) if len(args) >5 else 0.66
     results = []
     sets = None
     for i in range(repeat):
         delta = i * REPORT_OFFSET2
         results.append(load_report_json_part(
-            start_date= date1 - timedelta(offset*(delta +1)), end_date=date1 - timedelta(offset*delta), min_correl=min_correl, max_correl=max_correl, min_lisk=min_lisk
+            start_date= date1 - timedelta(offset*(delta +1)), end_date=date1 - timedelta(offset*delta), min_correl=min_correl, max_correl=max_correl, max_lisk=max_lisk
         ))
         if i == 0:
             sets = set(results[i].keys())
@@ -362,13 +363,13 @@ def load_past_report_json(*args):
             key_partial = f"{key2}_{key3}".split('_')
             if 0.33< efficient and efficient <0.66:
                 print(efficient, {
-                key_partial[0][3:9]: eff_dict[key2] * efficient,
-                key_partial[1][3:9]: (1-eff_dict[key2]) * efficient,
-                key_partial[2][3:9]: eff_dict[key3] * (1- efficient),
-                key_partial[3][3:9]: (1-eff_dict[key3]) * (1 - efficient)
-            })
+                    key_partial[0][3:9]: eff_dict[key2] * efficient,
+                    key_partial[1][3:9]: (1-eff_dict[key2]) * efficient,
+                    key_partial[2][3:9]: eff_dict[key3] * (1- efficient),
+                    key_partial[3][3:9]: (1-eff_dict[key3]) * (1 - efficient)
+                })
 
 if __name__ == "__main__":
     locals().get(sys.argv[1])(*(sys.argv[2:]))
-    # __init__.py load_report_json 3 2021-05-05 42 -1 -0.4 -2.25
+    # __init__.py load_report_json 3 2021-05-05 42 -1 -0.4 0.66
     # __init__.py load_past_report_json KR7241820000_KR7004920005 3 2021-05-05 42
