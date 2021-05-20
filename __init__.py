@@ -75,6 +75,7 @@ def load_stock_json(full_code, start_day=365, end_day=0):
     else:
         output_len = len(j2['output'])
         last_date = datetime.strptime(j2['output'][0]['TRD_DD'], '%Y/%m/%d').date() if output_len else None
+        print(start_date, last_date, end_date)
         if  output_len == 0:
             j2 = request_company(full_code)
             save_json(j2, path)
@@ -126,7 +127,7 @@ def zscore(output, start_date, end_date):
     close_sum = 0
     close_pow_sum = 0
     close_cnt = 0
-    close_last = None
+    close_first = None
     for _j2_data in output:
         trd_dd = datetime.strptime(_j2_data['TRD_DD'], '%Y/%m/%d').date()
         if start_date <= trd_dd and trd_dd <= end_date:
@@ -134,11 +135,11 @@ def zscore(output, start_date, end_date):
            close_sum += close
            close_pow_sum += close * close
            close_cnt += 1
-           close_last = close
-    if close_last:
+           close_first = close_first if close_first else close
+    if close_first:
         close_avg = close_sum/close_cnt
         close_var = close_pow_sum/close_cnt - close_avg * close_avg
-        return (close_last - close_avg)/math.sqrt(close_var) if close_var else None
+        return (close_first - close_avg)/math.sqrt(close_var) if close_var else None
     return None
 
 
@@ -260,7 +261,7 @@ def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,
                 editbeta2 = value2/math.copysign(correl, 1)
                 lisk = max(editbeta1/(editbeta1 + editbeta2), editbeta2/(editbeta1 + editbeta2))
                 if min_correl <= correl and correl < max_correl and lisk < max_lisk:
-                    result[k] = [editbeta1, editbeta2]
+                    result[k] = [editbeta1, editbeta2, correl]
     return result
 
 
@@ -277,7 +278,7 @@ def remove_stock_json():
 
 def load_normal(*args):
     start_day = int(args[0]) if len(args)>0 else 0
-    end_day = int(args[0]) if len(args)>0 else 0
+    end_day = int(args[1]) if len(args)>1 else 0
     exclude_index = int(args[2]) if len(args) >2 else 0
     data_all = load_stocklist_json()
     cnt = 0
@@ -324,7 +325,6 @@ def load_zscore(*args):
         try:
             results.append(load_json(path))
         except Exception as e:
-            print(e)
             results.append({})
             need_create[i] = (start_date, end_date)
     if len(need_create):
@@ -429,6 +429,7 @@ def load_past_report_json(*args):  # not work
         efficient = (var_j3 - cov)/ (var_j2 -2*cov +var_j3)
         print(math.sqrt(var_j2), math.sqrt(var_j3), efficient, 1-efficient)
         j2 = report_merge(j2, j3, efficient)
+    '''
     print('')
     data_all = load_stocklist_json()
     for i, d in enumerate(data_all):
@@ -440,9 +441,11 @@ def load_past_report_json(*args):  # not work
         if cov:
             efficient = (var_j3 - cov)/ (var_j2 -2*cov +var_j3)
             print(full_code, math.sqrt(var_j2), math.sqrt(var_j3), efficient, 1-efficient)
+    '''
 
 if __name__ == "__main__":
     locals().get(sys.argv[1])(*(sys.argv[2:]))
-    # __init__.py save_report_json 3 2021-05-19 28
-    # __init__.py load_report_json 3 2021-05-19 28 -1 -0.4 0.66
-    # __init__.py load_past_report_json KR7241820000_KR7004920005 3 2021-05-05 42
+    # __init__.py load_zscore 5 2021-05-19 28
+    # __init__.py save_report_json 5 2021-05-19 28
+    # __init__.py load_report_json 5 2021-05-19 28 -1 -0.5 0.66 -1
+    # __init__.py load_past_report_json KR7055490007_KR7214870008 5 2021-05-19 28
