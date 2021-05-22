@@ -1,63 +1,23 @@
 import FinanceDataReader as fdr
 from datetime import datetime, timedelta
-import pandas as pd
 import time
-import requests
-import json
-import os
 import sys
+import os
 import math
 import subprocess
 from jsonio import save_json, load_json
 from mathutil import cdf
+from requestutil import request_company, request_company_list
 
-headers = {'User-Agent': 'Chrome/78.0.3904.87 Safari/537.36',}
 INDEX_STOCK = ['ARIRANG', 'HANARO', 'KBSTAR', 'KINDEX', 'KODEX', 'TIGER', 'KOSEF', 'SMART', 'TREX']
 FILE_SPLIT = 10
-
-
-
-def request_company(full_code, start_date=datetime(1990,1,1), end_date=datetime(2100,1,1)):
-    data = {
-        'bld': 'dbms/MDC/STAT/issue/MDCSTAT23902',
-        'isuCd': full_code,
-        'isuCd2': '',
-        'strtDd': start_date.strftime("%Y%m%d"),
-        'endDd': end_date.strftime("%Y%m%d"),
-        'share': '1',
-        'money': '1',
-        'csvxls_isNo': 'false',
-    }
-    url = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
-    r = requests.post(url, data, headers=headers)
-    try:
-        return json.loads(r.text)
-    except Exception:
-        print(r._content.decode('utf-8'))
-
-# def read_company(data):
-#     df = pd.json_normalize(data['output'])
-#     col_map = {'TRD_DD':'Date', 'ISU_CD':'Code', 'ISU_NM':'Name', 'MKT_NM':'Market', 
-#                 'SECUGRP_NM':'SecuGroup', 'TDD_CLSPRC':'Close', 'FLUC_TP_CD':'UpDown', 
-#                 'CMPPRVDD_PRC':'Change', 'FLUC_RT':'ChangeRate', 
-#                 'TDD_OPNPRC':'Open', 'TDD_HGPRC':'High', 'TDD_LWPRC':'Lower', 
-#                 'ACC_TRDVOL':'Volume', 'ACC_TRDVAL':'Amount', 'MKTCAP':'MarCap'}
-
-#     df = df.rename(columns=col_map)
-#     df['Date'] = pd.to_datetime(df['Date'])
-#     int_cols = ['Close', 'UpDown', 'Change', 'Open', 'High', 'Lower', 'Volume', 'Amount', 'MarCap', 'ChangeRate']
-#     for col in int_cols: 
-#         df[col] = pd.to_numeric(df[col].str.replace(',', ''), errors='coerce')
-#     return df
-
 
 def load_stocklist_json():
     path = os.path.join('data', 'list.json')
     if os.path.exists(path):
         j = load_json(path)
     else:
-        r = requests.post('http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd', data={'bld': 'dbms/comm/finder/finder_stkisu',})
-        j = json.loads(r.text)
+        j = request_company_list()
         save_json(j, path)
     # filtering stock!
     return [
@@ -66,7 +26,8 @@ def load_stocklist_json():
         )
     ]
 
-def load_stock_json(full_code, start_date=datetime.now().date() - timedelta(days=365), end_date=datetime.now().date()):
+
+def load_stock_json(full_code, start_date=datetime.now().date() - timedelta(days=365), end_date=datetime.now().date(), log_datetime=False):
     path = os.path.join('data', 'stock', f'{full_code}.json')
     try:
         j2 = load_json(path)
@@ -78,7 +39,8 @@ def load_stock_json(full_code, start_date=datetime.now().date() - timedelta(days
     else:
         output_len = len(j2['output'])
         last_date = datetime.strptime(j2['output'][0]['TRD_DD'], '%Y/%m/%d').date() if output_len else None
-        # print(start_date, last_date, end_date)
+        if log_datetime:
+            print(start_date, last_date, end_date)
         if  output_len == 0:
             j2 = request_company(full_code)
             save_json(j2, path)
@@ -299,7 +261,7 @@ def load_normal(*args):
         if exclude_index and is_index_stock(d['codeName']):
             continue
         full_code = d['full_code']
-        j2 = load_stock_json(full_code, start_date=start_date, end_date=end_date)
+        j2 = load_stock_json(full_code, start_date=start_date, end_date=end_date, log_datetime=True)
         status[j2['_status']] += 1
         if j2['_status'] == 0:
             print(i, d)
