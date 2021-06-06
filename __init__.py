@@ -11,6 +11,8 @@ from requestutil import request_company, request_company_list
 
 INDEX_STOCK = ['ARIRANG', 'HANARO', 'KBSTAR', 'KINDEX', 'KODEX', 'TIGER', 'KOSEF', 'SMART', 'TREX']
 FILE_SPLIT = 10
+TRDVAL_DAYS = 20
+MIN_TRDVAL = 2000000000
 
 def load_stocklist_json():
     path = os.path.join('data', 'list.json')
@@ -157,7 +159,7 @@ def report_merge(j2_body, j3_body, efficient):
     return j4_body
 
 
-def save_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), exclude_index=True, reset=False, trdval_days=20, min_trdval=40000000000):
+def save_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), exclude_index=True, reset=False, trdval_days=TRDVAL_DAYS, min_trdval=MIN_TRDVAL):
     data_all = [d for d in load_stocklist_json() if (not exclude_index or not is_index_stock(d['codeName']))]
     data_split = [[] for i in range(FILE_SPLIT)]
     data_all_len_pow = len(data_all) * len(data_all)
@@ -252,6 +254,8 @@ def remove_stock_json():
 def load_normal(*args):
     start_date = datetime.strptime(args[0], '%Y-%m-%d').date() if len(args)>0 else datetime.now().date()
     end_date = datetime.strptime(args[1], '%Y-%m-%d').date() if len(args)>1 else datetime.now().date()
+    trdval_days = int(args[2]) if len(args)>2 else TRDVAL_DAYS
+    min_trdval = int(args[3]) if len(args)>3 else MIN_TRDVAL
     exclude_index = int(args[2]) if len(args) >2 else 0
     data_all = load_stocklist_json()
     cnt = 0
@@ -269,7 +273,7 @@ def load_normal(*args):
         else:
             print(i, d['codeName'])
             # print(j2['_status'], j2['output'][0]['TRD_DD']  if len(j2['output']) else None, datetime.strptime(j2['CURRENT_DATETIME'], '%Y.%m.%d %p %I:%M:%S').date())
-        if trdval_filter(j2, 20, 40000000000):
+        if trdval_filter(j2, trdval_days, min_trdval):
             cnt+=1
         #df = read_company(j2)
         #for i in range(len(df['Date'])):
@@ -372,7 +376,7 @@ def load_report_json(*args):
         print([k2[3:9] for k2 in key.split('_')], [result[key] for result in results])
     print('_'.join(sets))
 
-def load_past_report_json(*args):  # not work
+def load_past_report_json(*args):
     keys = args[0] if len(args) > 0 else None
     repeat = int(args[1]) if len(args) >1 else 0
     date1 = datetime.strptime(args[2], '%Y-%m-%d').date() if len(args) >2 else None
@@ -407,7 +411,7 @@ def load_past_report_json(*args):  # not work
             long_kelly = long_p *2 -1
             kelly = short_kelly*(1-long_p) + long_kelly*long_p
             kellys.append(kelly)
-            print(kk[3:9],(math.sqrt(_var), short_z, long_z), kelly)
+            print(kk[3:9],'std, short_z, long_z:', (math.sqrt(_var), short_z, long_z), 'kelly', kelly)
         print(key2[3:9], key3[3:9], efficient, 1-efficient)
         j_dict[f"{key2}_{key3}"] = report_merge(j2, j3, efficient)
         eff_dict[f"{key2}_{key3}"] = [efficient, 1-efficient] + kellys
@@ -434,10 +438,8 @@ def print_commands(*args):
     print(f'__init__.py load_zscore {repeat} {end_date} {offset}')
     print(f'__init__.py load_zscore 1 {end_date} {offset*3}')
     print(f'__init__.py save_report_json {repeat} {end_date} {offset}')
-    print(f'__init__.py load_report_json {repeat} {end_date} {offset} -1 -0.22 0.66 0')
+    print(f'__init__.py load_report_json {repeat} {end_date} {offset} -1 -0.22 0.66 0') # -0.22 -> -0.2 ~ -0.33
 
 
 if __name__ == "__main__":
     locals().get(sys.argv[1])(*(sys.argv[2:]))
-    # __init__.py print_commands 5 2021-05-01 2021-05-19 28
-    # __init__.py load_past_report_json KR7033540006_KR7074610007_KR7055490007_KR7214870008_KR7079000006_KR7003850005 5 2021-05-19 28 0.66
