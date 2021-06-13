@@ -6,7 +6,7 @@ import os
 import math
 import subprocess
 from jsonio import save_json, load_json
-from mathutil import cdf
+from mathutil import laplace_cdf
 from requestutil import request_company, request_company_list
 
 INDEX_STOCK = ['ARIRANG', 'HANARO', 'KBSTAR', 'KINDEX', 'KODEX', 'TIGER', 'KOSEF', 'SMART', 'TREX']
@@ -405,8 +405,8 @@ def load_past_report_json(*args):
         for kk, _var in [(key2, var_j2), (key3, var_j3)]:
             short_z = zscore_all.get(kk)
             long_z = long_zscore_all.get(kk)
-            short_p = 0.5 + math.copysign(cdf(short_z)-0.5, -short_z)
-            long_p = 0.5 + math.copysign(cdf(long_z)-0.5, -long_z)
+            short_p = 1 - laplace_cdf(short_z)
+            long_p = 1 - laplace_cdf(long_z)
             short_kelly = short_p * 2 -1
             long_kelly = long_p *2 -1
             kelly = short_kelly*(1-long_p) + long_kelly*long_p
