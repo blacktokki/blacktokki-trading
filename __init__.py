@@ -209,7 +209,7 @@ def save_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,
         save_json(data_table, path)
 
 
-def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), min_correl=-1 ,max_correl=1, max_lisk=0.66):
+def load_report_json_part(start_date=datetime(1990,1,1), end_date=datetime(2100,1,1), min_correl=-1 ,max_correl=1, max_lisk=0.8):
     root_path = os.path.join('data', 'report', f'{start_date}_{end_date}')
     data_all = {}
     result = {}
@@ -355,7 +355,7 @@ def load_report_json(*args):
     offset = int(args[2]) if len(args) >2 else None
     min_correl = float(args[3]) if len(args) >3 else -1
     max_correl = float(args[4]) if len(args) >4 else 1
-    max_lisk = float(args[5]) if len(args) >5 else 0.66
+    max_lisk = float(args[5]) if len(args) >5 else 0.8
     max_zscore = float(args[6]) if len(args) > 6 else 0
     results = []
     sets = None
@@ -381,7 +381,7 @@ def load_past_report_json(*args):
     repeat = int(args[1]) if len(args) >1 else 0
     date1 = datetime.strptime(args[2], '%Y-%m-%d').date() if len(args) >2 else None
     offset = int(args[3]) if len(args) >3 else None
-    max_lisk = float(args[4]) if len(args) >4 else 0.66
+    max_lisk = float(args[4]) if len(args) >4 else 0.8
     exclude_index = 1
     
     key_all = keys.split('_')
@@ -389,8 +389,8 @@ def load_past_report_json(*args):
     start_date = date1 - timedelta(offset*(delta +1))
     end_date = date1 - timedelta(offset*delta)
     j_all = [report_json_data(load_stock_json(key, start_date=datetime.now().date())['output'], start_date, end_date) for key in key_all]
-    zscore_all = load_zscore(*[1, date1, offset])[0]
-    long_zscore_all = load_zscore(*[1, date1, offset * 3])[0]
+    # zscore_all = load_zscore(*[1, date1, offset])[0]
+    # long_zscore_all = load_zscore(*[1, date1, offset * 3])[0]
     j_dict = {}
     eff_dict = {}
     i = 0
@@ -401,8 +401,8 @@ def load_past_report_json(*args):
         key3 = key_all[i+1]
         cov, var_j2, var_j3 = cov_and_var(j2, j3)
         efficient = (var_j3 - cov)/ (var_j2 -2*cov +var_j3)
-        kellys = []
         for kk, _var in [(key2, var_j2), (key3, var_j3)]:
+            '''
             short_z = zscore_all.get(kk)
             long_z = long_zscore_all.get(kk)
             short_p = 1 - laplace_cdf(short_z)
@@ -410,11 +410,11 @@ def load_past_report_json(*args):
             short_kelly = short_p * 2 -1
             long_kelly = long_p *2 -1
             kelly = short_kelly*(1-long_p) + long_kelly*long_p
-            kellys.append(kelly)
-            print(kk[3:9],'std, short_z, long_z:', (math.sqrt(_var), short_z, long_z), 'kelly', kelly)
+            '''
+            print(kk[3:9],'std:', math.sqrt(_var))
         print(key2[3:9], key3[3:9], efficient, 1-efficient)
         j_dict[f"{key2}_{key3}"] = report_merge(j2, j3, efficient)
-        eff_dict[f"{key2}_{key3}"] = [efficient, 1-efficient] + kellys
+        eff_dict[f"{key2}_{key3}"] = [efficient, 1-efficient]
         i+=2
     for i, kv in enumerate(j_dict.items()):
         key2, j2 = kv
@@ -424,10 +424,10 @@ def load_past_report_json(*args):
             key_partial = f"{key2}_{key3}".split('_')
             if (1- max_lisk)< efficient and efficient <max_lisk:
                 print(efficient, {
-                    key_partial[0][3:9]: (eff_dict[key2][0] * efficient, eff_dict[key2][2]),
-                    key_partial[1][3:9]: (eff_dict[key2][1] * efficient, eff_dict[key2][3]),
-                    key_partial[2][3:9]: (eff_dict[key3][0] * (1 - efficient), eff_dict[key3][2]),
-                    key_partial[3][3:9]: (eff_dict[key3][1] * (1 - efficient), eff_dict[key3][3])
+                    key_partial[0][3:9]: (eff_dict[key2][0] * efficient),
+                    key_partial[1][3:9]: (eff_dict[key2][1] * efficient),
+                    key_partial[2][3:9]: (eff_dict[key3][0] * (1 - efficient)),
+                    key_partial[3][3:9]: (eff_dict[key3][1] * (1 - efficient))
                 })
 def print_commands(*args):
     repeat = int(args[0]) if len(args) >0 else 0
