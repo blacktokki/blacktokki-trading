@@ -87,6 +87,29 @@ def report_json_data(output, start_date, end_date):
             j2.append(j2_data)
     return j2
 
+def avgstd(output, start_date, end_date):
+    close_sum = 0
+    close_pow_sum = 0
+    fluc_sum = 0
+    fluc_pow_sum = 0
+    close_cnt = 0
+    for _j2_data in output:
+        trd_dd = datetime.strptime(_j2_data['TRD_DD'], '%Y/%m/%d').date()
+        if start_date <= trd_dd and trd_dd <= end_date:
+           close = int(_j2_data['TDD_CLSPRC'].replace(',', ''))
+           close_sum += close
+           close_pow_sum += close * close
+           fluc = float(_j2_data['FLUC_RT'])
+           fluc_sum += fluc
+           fluc_pow_sum += fluc * fluc
+           close_cnt += 1
+        elif start_date > trd_dd:
+            break
+    if close_cnt:
+        close_avg = close_sum/close_cnt
+        fluc_avg = fluc_sum/close_cnt
+        return close_avg, math.sqrt(close_pow_sum/close_cnt - close_avg * close_avg), fluc_avg, math.sqrt(abs(fluc_pow_sum/close_cnt - fluc_avg * fluc_avg))
+    return None, None, None, None
 
 def zscore(output, start_date, end_date):
     close_sum = 0

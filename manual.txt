@@ -3,3 +3,4 @@ python -m venv ../venv3
 
 __init__.py print_report_commands 5 2021-05-17 2021-06-04 28
 __init__.py load_past_report_json KR7055490007_KR7214870008_KR7079000006_KR7003850005_KR7071850002_KR7005300009_KR7088350004_KR7298380007 5 2021-06-04 28 0.66
+__init__.py save_avgstd 5,10,20,30,60 2021-06-11 365
